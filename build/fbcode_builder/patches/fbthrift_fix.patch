@@ -1,0 +1,33 @@
+diff --git a/thrift/lib/CMakeLists.txt b/thrift/lib/CMakeLists.txt
+index 101f2d1ddc..1a9371ed60 100644
+--- a/thrift/lib/CMakeLists.txt
++++ b/thrift/lib/CMakeLists.txt
+@@ -22,6 +22,7 @@ if(thriftpy)
+ endif()
+ if(thriftpy3)
+   add_subdirectory(py3)
++  add_subdirectory(python)
+ endif()
+ 
+ set(LIB_DIRS
+@@ -29,6 +30,7 @@ set(LIB_DIRS
+   cpp
+   cpp2
+   py3
++  python
+ )
+ foreach(dir ${LIB_DIRS})
+   install(DIRECTORY ${dir} "${CMAKE_CURRENT_BINARY_DIR}/${dir}"
+diff --git a/thrift/lib/py3/CMakeLists.txt b/thrift/lib/py3/CMakeLists.txt
+index 9929cf0cc1..68791d48a6 100644
+--- a/thrift/lib/py3/CMakeLists.txt
++++ b/thrift/lib/py3/CMakeLists.txt
+@@ -114,7 +114,7 @@ foreach(_mod ${cpp_tgts})
+   )
+ 
+   if(${_f} STREQUAL "types")
+-    python_add_module(${_module_name} "${_cxx}" "enums.cpp")
++    python_add_module(${_module_name} "${_cxx}")
+   else()
+     python_add_module(${_module_name} "${_cxx}")
+   endif()

@@ -15,6 +15,7 @@ fb303_core = fb303/thrift
 
 [build]
 builder = cmake
+patchfile = fb303_core_gen.patch
 
 [dependencies]
 folly

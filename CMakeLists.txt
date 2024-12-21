@@ -67,6 +67,7 @@ find_package(fmt CONFIG REQUIRED)
 find_package(FBThrift CONFIG REQUIRED)
 find_package(fizz CONFIG REQUIRED)
 find_package(wangle CONFIG REQUIRED)
+find_package(proxygen CONFIG REQUIRED)
 
 include(FBThriftLibrary)
 

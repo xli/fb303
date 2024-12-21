@@ -1,3 +1,23 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c6b2b2a810..5b235de9d5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -114,6 +114,7 @@ if (THRIFT_LIB_ONLY OR build_all)
+   find_package(Zstd REQUIRED)
+   find_package(Xxhash REQUIRED)
+   find_package(mvfst CONFIG REQUIRED)
++  find_package(proxygen CONFIG REQUIRED)
+   # https://cmake.org/cmake/help/v3.9/module/FindThreads.html
+   set(THREADS_PREFER_PTHREAD_FLAG ON)
+   find_package(Threads)
+@@ -123,6 +124,7 @@ if (THRIFT_LIB_ONLY OR build_all)
+     ${OPENSSL_INCLUDE_DIR}
+     ${ZSTD_INCLUDE_DIRS}
+     ${Xxhash_INCLUDE_DIR}
++    ${proxygen_INCLUDE_DIRS}
+   )
+   add_definitions("-DTHRIFT_HAVE_LIBSNAPPY=0")
+   if (THRIFT_LIB_ONLY)
 diff --git a/thrift/lib/CMakeLists.txt b/thrift/lib/CMakeLists.txt
 index 101f2d1ddc..e4c1e7ec22 100644
 --- a/thrift/lib/CMakeLists.txt
@@ -10,6 +30,38 @@ index 101f2d1ddc..e4c1e7ec22 100644
  )
  foreach(dir ${LIB_DIRS})
    install(DIRECTORY ${dir} "${CMAKE_CURRENT_BINARY_DIR}/${dir}"
+diff --git a/thrift/lib/cpp2/CMakeLists.txt b/thrift/lib/cpp2/CMakeLists.txt
+index 439f08142e..afc4eef2e1 100644
+--- a/thrift/lib/cpp2/CMakeLists.txt
++++ b/thrift/lib/cpp2/CMakeLists.txt
+@@ -222,6 +222,7 @@ add_library(
+   async/AsyncProcessor.cpp
+   async/AsyncProcessorHelper.cpp
+   async/ClientChannel.cpp
++  async/ClientInterceptorBase.cpp
+   async/ClientSinkBridge.cpp
+   async/ClientStreamBridge.cpp
+   async/Cpp2Channel.cpp
+@@ -232,9 +233,11 @@ add_library(
+   async/HeaderClientChannel.cpp
+   async/HeaderServerChannel.cpp
+   async/HibernatingRequestChannel.cpp
++  async/HTTPClientChannel.cpp
+   async/Interaction.cpp
+   async/MultiplexAsyncProcessor.cpp
+   async/PooledRequestChannel.cpp
++  async/PreprocessingAsyncProcessorWrapper.cpp
+   async/ReconnectingRequestChannel.cpp
+   async/RequestCallback.cpp
+   async/RequestChannel.cpp
+@@ -365,6 +368,7 @@ target_link_libraries(
+     thrifttype
+     thriftanyrep
+     serverdbginfo
++    proxygen::proxygen
+     ${Xxhash_LIBRARY}
+ )
+ 
 diff --git a/thrift/lib/py3/CMakeLists.txt b/thrift/lib/py3/CMakeLists.txt
 index 9929cf0cc1..68791d48a6 100644
 --- a/thrift/lib/py3/CMakeLists.txt

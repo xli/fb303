@@ -11,7 +11,6 @@ sha256 = c86bd9d9eef795b4b0d3802279419fde5221922805b073b9bd822edecb1ca28e
 
 [preinstalled.env]
 # Here we list the acceptable versions that cmake needs a hint to find
-BOOST_ROOT_1_69_0
 BOOST_ROOT_1_87_0
 
 [debs]

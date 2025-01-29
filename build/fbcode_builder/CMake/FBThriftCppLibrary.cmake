@@ -63,13 +63,13 @@ function(add_fbthrift_cpp_library LIB_NAME THRIFT_FILE)
     "${output_dir}/gen-cpp2/${base}_types.tcc"
     "${output_dir}/gen-cpp2/${base}_types_custom_protocol.h"
     "${output_dir}/gen-cpp2/${base}_metadata.h"
+    "${output_dir}/gen-cpp2/${base}_data.h"
   )
   list(APPEND generated_sources
     "${output_dir}/gen-cpp2/${base}_constants.cpp"
-    "${output_dir}/gen-cpp2/${base}_data.h"
-    "${output_dir}/gen-cpp2/${base}_data.cpp"
     "${output_dir}/gen-cpp2/${base}_types.cpp"
     "${output_dir}/gen-cpp2/${base}_metadata.cpp"
+    "${output_dir}/gen-cpp2/${base}_data.cpp"
   )
   foreach(service IN LISTS ARG_SERVICES)
     list(APPEND generated_headers

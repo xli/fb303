@@ -1,0 +1,1060 @@
+diff --git a/.buckconfig.d/external_cells/facebook/buck2-shims-meta/external_cell.buckconfig b/.buckconfig.d/external_cells/facebook/buck2-shims-meta/external_cell.buckconfig
+index ed56380ca..91c30289c 100644
+--- a/.buckconfig.d/external_cells/facebook/buck2-shims-meta/external_cell.buckconfig
++++ b/.buckconfig.d/external_cells/facebook/buck2-shims-meta/external_cell.buckconfig
+@@ -6,4 +6,4 @@ gh_facebook_buck2_shims_meta = git
+ 
+ [external_cell_gh_facebook_buck2_shims_meta]
+ git_origin = https://github.com/facebook/buck2-shims-meta.git
+-commit_hash = b74887e4e5d2042de64f429a348a6eb84c80f977
++commit_hash = 7e642459b7444c44fcdda109ce515ac4d23d428e
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index bc99ce33b..ea0e086df 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -466,6 +466,10 @@ option(PYTHON_EXTENSIONS
+   "Build Python Bindings for Folly, requires Cython and (BUILD_SHARED_LIBS=ON)"
+   OFF
+ )
++set(PYTHON_INSTALL_DIR "" CACHE STRING
++  "The subdirectory where folly Python library should be installed, if non-empty and PYTHON_EXTENSIONS=ON."
++)
++
+ 
+ add_library(folly
+   $<TARGET_OBJECTS:folly_base>
+@@ -1104,6 +1108,7 @@ if (BUILD_TESTS OR BUILD_BENCHMARKS)
+       BENCHMARK fingerprint_benchmark SOURCES FingerprintBenchmark.cpp
+       TEST fingerprint_test SOURCES FingerprintTest.cpp
+       TEST fixed_string_test SOURCES FixedStringTest.cpp
++      TEST fmt_utility_test SOURCES FmtUtilityTest.cpp
+       TEST format_other_test SOURCES FormatOtherTest.cpp
+       BENCHMARK format_benchmark SOURCES FormatBenchmark.cpp
+       TEST format_test SOURCES FormatTest.cpp
+diff --git a/build/fbcode_builder/manifests/boost b/build/fbcode_builder/manifests/boost
+index 923e52314..3313ef90c 100644
+--- a/build/fbcode_builder/manifests/boost
++++ b/build/fbcode_builder/manifests/boost
+@@ -2,8 +2,8 @@
+ name = boost
+ 
+ [download.not(os=windows)]
+-url = https://archives.boost.io/release/1.83.0/source/boost_1_83_0.tar.gz
+-sha256 = c0685b68dd44cc46574cce86c4e17c0f611b15e195be9848dfd0769a0a207628
++url = https://archives.boost.io/release/1.87.0/source/boost_1_87_0_rc1.tar.gz
++sha256 = f55c340aa49763b1925ccf02b2e83f35fdcf634c9d5164a2acb87540173c741d
+ 
+ [download.os=windows]
+ url = https://archives.boost.io/release/1.83.0/source/boost_1_83_0.zip
+@@ -12,7 +12,7 @@ sha256 = c86bd9d9eef795b4b0d3802279419fde5221922805b073b9bd822edecb1ca28e
+ [preinstalled.env]
+ # Here we list the acceptable versions that cmake needs a hint to find
+ BOOST_ROOT_1_69_0
+-BOOST_ROOT_1_83_0
++BOOST_ROOT_1_87_0
+ 
+ [debs]
+ libboost-all-dev
+diff --git a/folly/BUCK b/folly/BUCK
+index e02439c0d..a3690ddcd 100644
+--- a/folly/BUCK
++++ b/folly/BUCK
+@@ -566,6 +566,17 @@ cpp_library(
+     ],
+ )
+ 
++cpp_library(
++    name = "fmt_utility",
++    headers = [
++        "FmtUtility.h",
++    ],
++    exported_deps = [
++        "fbsource//third-party/fmt:fmt",
++        ":cpp_attributes",
++    ],
++)
++
+ cpp_library(
+     name = "format",
+     srcs = [
+diff --git a/folly/Benchmark.cpp b/folly/Benchmark.cpp
+index 081a281a0..a868b7f48 100644
+--- a/folly/Benchmark.cpp
++++ b/folly/Benchmark.cpp
+@@ -263,11 +263,11 @@ static std::pair<double, UserCounters> runBenchmarkGetNSPerIterationEstimate(
+   size_t actualTrials = 0;
+   const unsigned int estimateCount = to_integral(max(1.0, 5e+7 / estPerIter));
+   std::vector<TrialResultType> trialResults(FLAGS_bm_max_trials);
+-  const auto maxRunTime = seconds(5);
++  const auto maxRunTime = seconds(max(5, FLAGS_bm_max_secs));
+   auto globalStart = high_resolution_clock::now();
+ 
+   // Run benchmark up to trial times with at least 0.5 sec each
+-  // Or until we run out of alowed time (5sec)
++  // Or until we run out of allowed time (max(5, FLAGS_bm_max_secs))
+   for (size_t tryId = 0; tryId < FLAGS_bm_max_trials; tryId++) {
+     detail::TimeIterData timeIterData = fun(estimateCount);
+     auto nsecs = duration_cast<nanoseconds>(timeIterData.duration);
+diff --git a/folly/CMakeLists.txt b/folly/CMakeLists.txt
+index 57b4dbcc4..bf36fe95a 100644
+--- a/folly/CMakeLists.txt
++++ b/folly/CMakeLists.txt
+@@ -12,6 +12,8 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ 
++set(CMAKE_VERBOSE_MAKEFILE ON)
++
+ add_library(
+     follybenchmark
+     Benchmark.cpp
+@@ -38,49 +40,135 @@ if (PYTHON_EXTENSIONS)
+ 
+   set(_cybld "${CMAKE_CURRENT_BINARY_DIR}/cybld")
+ 
++  add_custom_target(gen_cython_headers ALL)
+   add_custom_target(create_binding_symlink ALL)
+   file(GLOB BindingFiles
+-    "${CMAKE_CURRENT_SOURCE_DIR}/python/*.pyx"
++    "${CMAKE_CURRENT_SOURCE_DIR}/python/executor.pyx"
++    "${CMAKE_CURRENT_SOURCE_DIR}/python/iobuf.pyx"
+     "${CMAKE_CURRENT_SOURCE_DIR}/python/*.pxd"
+     "${CMAKE_CURRENT_SOURCE_DIR}/python/*.h"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/python/*.cpp"
+   )
+   file(MAKE_DIRECTORY "${_cybld}/folly/")
++  file(MAKE_DIRECTORY "${_cybld}/folly/python/")
+ 
+   foreach(_src ${BindingFiles})
+     get_filename_component(_target_file "${_src}" NAME)
+ 
+-  message(
+-    STATUS
+-    "Linking ${_src} "
+-    "to ${_cybld}/folly/${_target_file}"
+-  )
+-  add_custom_command(TARGET create_binding_symlink PRE_BUILD
+-    COMMAND
+-      ${CMAKE_COMMAND} -E create_symlink
+-      "${_src}"
+-      "${_cybld}/folly/${_target_file}"
+-  )
++    message(
++      STATUS
++      "Linking ${_src} "
++      "to ${_cybld}/folly/${_target_file}"
++    )
++    add_custom_command(TARGET create_binding_symlink PRE_BUILD
++      COMMAND
++        ${CMAKE_COMMAND} -E create_symlink
++        "${_src}"
++        "${_cybld}/folly/${_target_file}"
++    )
+   endforeach()
+ 
++
+   # Tell setup.py where to find includes and libfolly.so
++  # set(prop "$<TARGET_PROPERTY:folly_base,INCLUDE_DIRECTORIES>")
++  # set(incs "$<$<BOOL:${prop}>:-I$<JOIN:${prop},:>>")
++  # set(libs "-L${CMAKE_BINARY_DIR}")
++
+   set(prop "$<TARGET_PROPERTY:folly_base,INCLUDE_DIRECTORIES>")
+   set(incs "$<$<BOOL:${prop}>:-I$<JOIN:${prop},:>>")
+-  set(libs "-L${CMAKE_BINARY_DIR}")
++  # set(link_prop "$<TARGET_PROPERTY:folly_base,LINK_DIRECTORIES>")
++  # set(libs "$<$<BOOL:${link_prop}>:-L$<JOIN:${link_prop},:>>")
++  # set(libs "-L$<JOIN:${link_prop},:>")
++  # set(libs "-L${CMAKE_BINARY_DIR}:${libs}")
++  message(STATUS "[jmswen] ${FOLLY_LINK_LIBRARIES}")
++  message(STATUS "[jmswen] ${CMAKE_REQUIRED_LINK_DIRECTORIES}")
++  #  set(libs "-L$<JOIN:${FOLLY_LINK_LIBRARIES},:>")
++  set(glog_lib "${GLOG_LIBRARY}")
++  cmake_path(REMOVE_FILENAME glog_lib)
++  set(libs "-L${CMAKE_BINARY_DIR}:${CMAKE_BINARY_DIR}/folly:${glog_lib}")
+ 
+   add_custom_target(folly_python_bindings ALL
+-    DEPENDS folly create_binding_symlink
++    DEPENDS folly create_binding_symlink gen_cython_headers
+     WORKING_DIRECTORY ${_cybld})
+ 
+   add_custom_command(TARGET folly_python_bindings POST_BUILD
+     COMMAND
+       python3 ${CMAKE_CURRENT_SOURCE_DIR}/python/setup.py
+       build_ext -f ${incs} ${libs}
+-    BYPRODUCTS ${_cybld}/folly/executor_api.h
++    BYPRODUCTS
++      ${_cybld}/folly/executor_api.h
++      ${_cybld}/folly/iobuf_api.h
+     WORKING_DIRECTORY ${_cybld}
+   )
+ 
+-  add_custom_command(TARGET folly_python_bindings POST_BUILD
++  add_custom_command(TARGET gen_cython_headers
++    COMMAND cython ${_cybld}/folly/executor.pyx --cplus -3 --fast-fail -o ${_cybld}/folly/cy_executor.h
++  )
++
++  add_custom_command(TARGET gen_cython_headers
++    COMMAND cython ${_cybld}/folly/iobuf.pyx --cplus -3 --fast-fail -o ${_cybld}/folly/cy_iobuf.h
++  )
++
++  add_custom_target(create_post_binding_symlink ALL)
++  add_custom_command(TARGET create_post_binding_symlink
++    COMMAND
++      ${CMAKE_COMMAND} -E create_symlink
++      "${_cybld}/folly/cy_executor_api.h"
++      "${_cybld}/folly/python/executor_api.h"
++  )
++  add_custom_command(TARGET create_post_binding_symlink
++    COMMAND
++      ${CMAKE_COMMAND} -E create_symlink
++      "${_cybld}/folly/cy_iobuf_api.h"
++      "${_cybld}/folly/python/iobuf_api.h"
++  )
++  add_custom_command(TARGET create_post_binding_symlink
++    COMMAND
++      ${CMAKE_COMMAND} -E create_symlink
++      "${_cybld}/folly/iobuf_ext.h"
++      "${_cybld}/folly/python/iobuf_ext.h"
++  )
++  add_custom_command(TARGET create_post_binding_symlink
++    COMMAND
++      ${CMAKE_COMMAND} -E create_symlink
++      "${_cybld}/folly/error.h"
++      "${_cybld}/folly/python/error.h"
++  )
++  add_custom_command(TARGET create_post_binding_symlink
++    COMMAND
++      ${CMAKE_COMMAND} -E create_symlink
++      "${_cybld}/folly/ProactorExecutor.h"
++      "${_cybld}/folly/python/ProactorExecutor.h"
++  )
++
++  add_library(
++    folly_python_cpp
++      python/executor.cpp
++      python/iobuf.cpp
++      python/iobuf_ext.cpp
++      python/error.cpp
++      python/ProactorExecutor.cpp
++  )
++
++  add_dependencies(gen_cython_headers create_binding_symlink)
++  add_dependencies(create_post_binding_symlink gen_cython_headers)
++  add_dependencies(folly_python_cpp create_post_binding_symlink)
++  add_dependencies(folly_python_bindings folly_python_cpp)
++  set_property(TARGET folly_python_cpp PROPERTY VERSION ${PACKAGE_VERSION})
++  target_compile_definitions(folly_python_cpp PRIVATE BOOST_NO_AUTO_PTR)
++  target_include_directories(folly_python_cpp PRIVATE "${_cybld}")
++  target_link_libraries(folly_python_cpp PUBLIC folly)
++  apply_folly_compile_options_to_target(folly_python_cpp)
++  install(
++    TARGETS folly_python_cpp
++    EXPORT folly
++    DESTINATION ${CMAKE_INSTALL_PREFIX}
++  )
++  install(
++    TARGETS folly_python_cpp
++    DESTINATION ${PYTHON_INSTALL_DIR}
++  )
++
++  add_custom_command(TARGET folly_python_bindings
+     COMMAND
+       python3 ${CMAKE_CURRENT_SOURCE_DIR}/python/setup.py
+       bdist_wheel
+@@ -88,23 +176,39 @@ if (PYTHON_EXTENSIONS)
+   )
+ 
+   install(
+-    FILES ${_cybld}/folly/executor_api.h
++    FILES
++      ${_cybld}/folly/executor_api.h
++      ${_cybld}/folly/iobuf_api.h
++      ${_cybld}/folly/iobuf_ext.h
++      ${_cybld}/folly/import.h
++      ${_cybld}/folly/error.h
++      ${_cybld}/folly/ProactorExecutor.h
+     DESTINATION ${INCLUDE_INSTALL_DIR}/folly/python
+     COMPONENT dev
+   )
+ 
+   # Install Folly Python Bindings
+-  if (UNIX)
+-    set(ROOT_ARG "--root \$DESTDIR/")
+-  endif ()
+-
+   install(CODE "
+     execute_process(
+       COMMAND
+         python3 ${CMAKE_CURRENT_SOURCE_DIR}/python/setup.py install
+-        --prefix ${CMAKE_INSTALL_PREFIX} ${ROOT_ARG}
++        --prefix ${CMAKE_INSTALL_PREFIX} -v
+       COMMAND_ECHO STDOUT
+       WORKING_DIRECTORY ${_cybld}
+     )"
+   )
++
++  # Install to a second directory. Unfrotunately, setting CMAKE_INSTALL_PREFIX
++  # directly does not play nicely with getdeps.py.
++  if (NOT ${PYTHON_INSTALL_DIR} STREQUAL "")
++    install(CODE "
++      execute_process(
++        COMMAND
++          python3 ${CMAKE_CURRENT_SOURCE_DIR}/python/setup.py install
++          --prefix ${PYTHON_INSTALL_DIR}
++        COMMAND_ECHO STDOUT
++        WORKING_DIRECTORY ${_cybld}
++      )"
++    )
++  endif()
+ endif ()
+diff --git a/folly/CppAttributes.h b/folly/CppAttributes.h
+index a701f4917..702b31577 100644
+--- a/folly/CppAttributes.h
++++ b/folly/CppAttributes.h
+@@ -171,6 +171,12 @@
+ #define FOLLY_ATTR_GNU_USED
+ #endif
+ 
++#if FOLLY_HAS_CPP_ATTRIBUTE(clang::lifetimebound)
++#define FOLLY_ATTR_CLANG_LIFETIMEBOUND clang::lifetimebound
++#else
++#define FOLLY_ATTR_CLANG_LIFETIMEBOUND
++#endif
++
+ #if FOLLY_HAS_CPP_ATTRIBUTE(clang::coro_await_elidable)
+ #define FOLLY_ATTR_CLANG_CORO_AWAIT_ELIDABLE clang::coro_await_elidable
+ #else
+diff --git a/folly/FmtUtility.h b/folly/FmtUtility.h
+new file mode 100644
+index 000000000..915716956
+--- /dev/null
++++ b/folly/FmtUtility.h
+@@ -0,0 +1,47 @@
++/*
++ * Copyright (c) Meta Platforms, Inc. and affiliates.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#pragma once
++
++#include <fmt/args.h>
++
++#include <folly/CppAttributes.h>
++
++namespace folly {
++
++/// fmt_make_format_args_from_map_fn
++/// fmt_make_format_args_from_map
++///
++/// A helper function-object type and variable for making a format-args object
++/// from a map.
++///
++/// May be useful for transitioning from legacy folly::svformat to fmt::vformat.
++struct fmt_make_format_args_from_map_fn {
++  template <typename Map>
++  fmt::dynamic_format_arg_store<fmt::format_context> operator()(
++      [[FOLLY_ATTR_CLANG_LIFETIMEBOUND]] Map const& map) const {
++    fmt::dynamic_format_arg_store<fmt::format_context> ret;
++    ret.reserve(map.size(), map.size());
++    for (auto const& [key, val] : map) {
++      ret.push_back(fmt::arg(key.c_str(), std::cref(val)));
++    }
++    return ret;
++  }
++};
++inline constexpr fmt_make_format_args_from_map_fn
++    fmt_make_format_args_from_map{};
++
++} // namespace folly
+diff --git a/folly/io/async/AsyncIoUringSocket.cpp b/folly/io/async/AsyncIoUringSocket.cpp
+index dff6bd12d..9a95fcf27 100644
+--- a/folly/io/async/AsyncIoUringSocket.cpp
++++ b/folly/io/async/AsyncIoUringSocket.cpp
+@@ -16,10 +16,10 @@
+ 
+ #include <folly/Conv.h>
+ #include <folly/detail/SocketFastOpen.h>
+-#include <folly/experimental/io/IoUringEventBaseLocal.h>
+ #include <folly/io/Cursor.h>
+ #include <folly/io/async/AsyncIoUringSocket.h>
+ #include <folly/io/async/AsyncSocket.h>
++#include <folly/io/async/IoUringEventBaseLocal.h>
+ #include <folly/memory/Malloc.h>
+ #include <folly/portability/SysUio.h>
+ 
+diff --git a/folly/io/async/AsyncIoUringSocket.h b/folly/io/async/AsyncIoUringSocket.h
+index 06c9662b3..9ec3cf5dd 100644
+--- a/folly/io/async/AsyncIoUringSocket.h
++++ b/folly/io/async/AsyncIoUringSocket.h
+@@ -24,8 +24,6 @@
+ #include <boost/intrusive/slist.hpp>
+ #include <folly/Optional.h>
+ #include <folly/SocketAddress.h>
+-#include <folly/experimental/io/IoUringBase.h>
+-#include <folly/experimental/io/Liburing.h>
+ #include <folly/futures/Future.h>
+ #include <folly/io/IOBuf.h>
+ #include <folly/io/IOBufIovecBuilder.h>
+@@ -36,6 +34,8 @@
+ #include <folly/io/async/AsyncTransport.h>
+ #include <folly/io/async/DelayedDestruction.h>
+ #include <folly/io/async/EventHandler.h>
++#include <folly/io/async/IoUringBase.h>
++#include <folly/io/async/Liburing.h>
+ #include <folly/net/NetOpsDispatcher.h>
+ #include <folly/portability/Sockets.h>
+ #include <folly/small_vector.h>
+diff --git a/folly/io/async/AsyncIoUringSocketFactory.h b/folly/io/async/AsyncIoUringSocketFactory.h
+index 9df4e1331..15a7ff142 100644
+--- a/folly/io/async/AsyncIoUringSocketFactory.h
++++ b/folly/io/async/AsyncIoUringSocketFactory.h
+@@ -16,8 +16,8 @@
+ 
+ #pragma once
+ 
+-#include <folly/experimental/io/Liburing.h>
+ #include <folly/io/async/AsyncIoUringSocket.h>
++#include <folly/io/async/Liburing.h>
+ 
+ namespace folly {
+ 
+diff --git a/folly/io/async/BUCK b/folly/io/async/BUCK
+index 170938826..69576411a 100644
+--- a/folly/io/async/BUCK
++++ b/folly/io/async/BUCK
+@@ -612,7 +612,7 @@ cpp_library(
+     deps = [
+         "//folly:conv",
+         "//folly/detail:socket_fast_open",
+-        "//folly/experimental/io:io_uring_event_base_local",
++        "//folly/io/async:io_uring_event_base_local",
+         "//folly/memory:malloc",
+         "//folly/portability:sys_uio",
+     ],
+@@ -620,8 +620,6 @@ cpp_library(
+         "//folly:network_address",
+         "//folly:optional",
+         "//folly:small_vector",
+-        "//folly/experimental/io:io_uring_backend",
+-        "//folly/experimental/io:liburing",
+         "//folly/futures:core",
+         "//folly/io:iobuf",
+         "//folly/io:socket_option_map",
+@@ -630,6 +628,8 @@ cpp_library(
+         "//folly/io/async:async_socket_exception",
+         "//folly/io/async:async_transport",
+         "//folly/io/async:delayed_destruction",
++        "//folly/io/async:io_uring_backend",
++        "//folly/io/async:liburing",
+         "//folly/net:net_ops_dispatcher",
+         "//folly/portability:sockets",
+     ],
+@@ -646,8 +646,8 @@ cpp_library(
+         "//folly:string",
+         "//folly/coro:baton",
+         "//folly/experimental/io:async_io",
+-        "//folly/experimental/io:io_uring",
+-        "//folly/experimental/io:liburing",
++        "//folly/io/async:io_uring",
++        "//folly/io/async:liburing",
+         "//folly/portability:sockets",
+     ],
+     exported_deps = [
+@@ -700,7 +700,7 @@ cpp_library(
+         "//folly:file_util",
+         "//folly:string",
+         "//folly/experimental/io:epoll",
+-        "//folly/experimental/io:liburing",
++        "//folly/io/async:liburing",
+         "//folly/lang:align",
+         "//folly/portability:gflags",
+         "//folly/synchronization:baton",
+@@ -755,9 +755,9 @@ cpp_library(
+         "//folly/portability:unistd",
+     ],
+     exported_deps = [
++        ":async_base_class",
++        ":liburing",
+         "//folly:shared_mutex",
+-        "//folly/experimental/io:async_base",
+-        "//folly/experimental/io:liburing",
+     ],
+     external_deps = [
+         "boost",
+@@ -783,7 +783,7 @@ cpp_library(
+         "//folly:spin_lock",
+         "//folly:string",
+         "//folly/container:f14_hash",
+-        "//folly/experimental/io:io_uring_provided_buffer_ring",
++        "//folly/io/async:io_uring_provided_buffer_ring",
+         "//folly/lang:bits",
+         "//folly/portability:gflags",
+         "//folly/portability:sockets",
+@@ -801,10 +801,10 @@ cpp_library(
+         "//folly:optional",
+         "//folly:range",
+         "//folly:small_vector",
+-        "//folly/experimental/io:liburing",
+         "//folly/io:iobuf",
+         "//folly/io/async:async_base",
+         "//folly/io/async:delayed_destruction",
++        "//folly/io/async:liburing",
+         "//folly/portability:asm",
+     ],
+     exported_external_deps = [
+@@ -829,9 +829,9 @@ cpp_library(
+         "//folly:string",
+     ],
+     exported_deps = [
+-        "//folly/experimental/io:liburing",
+         "//folly/io:iobuf",
+         "//folly/io/async:delayed_destruction",
++        "//folly/io/async:liburing",
+         "//folly/portability:sys_mman",
+     ],
+     exported_external_deps = [
+@@ -850,9 +850,9 @@ cpp_library(
+     modular_headers = False,
+     exported_deps = [
+         "//folly:file",
+-        "//folly/experimental/io:io_uring_backend",
+-        "//folly/experimental/io:liburing",
+         "//folly/io/async:async_base",
++        "//folly/io/async:io_uring_backend",
++        "//folly/io/async:liburing",
+     ],
+ )
+ 
+@@ -867,12 +867,12 @@ cpp_library(
+     modular_headers = False,
+     deps = [
+         "//folly:singleton",
+-        "//folly/experimental/io:io_uring_event",
++        "//folly/io/async:io_uring_event",
+     ],
+     exported_deps = [
+-        "//folly/experimental/io:io_uring_backend",
+-        "//folly/experimental/io:liburing",
+         "//folly/io/async:async_base",
++        "//folly/io/async:io_uring_backend",
++        "//folly/io/async:liburing",
+     ],
+     exported_external_deps = [
+     ],
+diff --git a/folly/io/async/EventBasePoller.cpp b/folly/io/async/EventBasePoller.cpp
+index e783b99f3..d51f3b581 100644
+--- a/folly/io/async/EventBasePoller.cpp
++++ b/folly/io/async/EventBasePoller.cpp
+@@ -25,7 +25,7 @@
+ #include <folly/FileUtil.h>
+ #include <folly/String.h>
+ #include <folly/experimental/io/Epoll.h>
+-#include <folly/experimental/io/Liburing.h>
++#include <folly/io/async/Liburing.h>
+ #include <folly/lang/Align.h>
+ #include <folly/portability/GFlags.h>
+ #include <folly/synchronization/Baton.h>
+diff --git a/folly/io/async/IoUring.h b/folly/io/async/IoUring.h
+index 88f34ab51..009fdb76c 100644
+--- a/folly/io/async/IoUring.h
++++ b/folly/io/async/IoUring.h
+@@ -17,8 +17,8 @@
+ #pragma once
+ 
+ #include <folly/SharedMutex.h>
+-#include <folly/experimental/io/AsyncBase.h>
+-#include <folly/experimental/io/Liburing.h>
++#include <folly/io/async/AsyncBase.h>
++#include <folly/io/async/Liburing.h>
+ 
+ #if FOLLY_HAS_LIBURING
+ 
+diff --git a/folly/io/async/IoUringBackend.cpp b/folly/io/async/IoUringBackend.cpp
+index 2f9f45105..1b7803121 100644
+--- a/folly/io/async/IoUringBackend.cpp
++++ b/folly/io/async/IoUringBackend.cpp
+@@ -55,7 +55,7 @@ extern "C" FOLLY_ATTR_WEAK void eb_poll_loop_post_hook(
+ #endif
+ 
+ #if FOLLY_IO_URING_UP_TO_DATE
+-#include <folly/experimental/io/IoUringProvidedBufferRing.h>
++#include <folly/io/async/IoUringProvidedBufferRing.h>
+ #endif
+ 
+ namespace folly {
+diff --git a/folly/io/async/IoUringBackend.h b/folly/io/async/IoUringBackend.h
+index cb2f322ab..873a24aa1 100644
+--- a/folly/io/async/IoUringBackend.h
++++ b/folly/io/async/IoUringBackend.h
+@@ -35,10 +35,10 @@
+ #include <folly/Function.h>
+ #include <folly/Optional.h>
+ #include <folly/Range.h>
+-#include <folly/experimental/io/Liburing.h>
+ #include <folly/io/IOBuf.h>
+ #include <folly/io/async/EventBaseBackendBase.h>
+ #include <folly/io/async/IoUringBase.h>
++#include <folly/io/async/Liburing.h>
+ #include <folly/portability/Asm.h>
+ #include <folly/small_vector.h>
+ 
+diff --git a/folly/io/async/IoUringEvent.h b/folly/io/async/IoUringEvent.h
+index c048aaffb..ddc9db004 100644
+--- a/folly/io/async/IoUringEvent.h
++++ b/folly/io/async/IoUringEvent.h
+@@ -17,10 +17,10 @@
+ #pragma once
+ 
+ #include <folly/File.h>
+-#include <folly/experimental/io/IoUringBackend.h>
+-#include <folly/experimental/io/Liburing.h>
+ #include <folly/io/async/EventBase.h>
+ #include <folly/io/async/EventHandler.h>
++#include <folly/io/async/IoUringBackend.h>
++#include <folly/io/async/Liburing.h>
+ 
+ namespace folly {
+ 
+diff --git a/folly/io/async/IoUringEventBaseLocal.cpp b/folly/io/async/IoUringEventBaseLocal.cpp
+index bfbb00bba..603f17bf5 100644
+--- a/folly/io/async/IoUringEventBaseLocal.cpp
++++ b/folly/io/async/IoUringEventBaseLocal.cpp
+@@ -15,8 +15,8 @@
+  */
+ 
+ #include <folly/Singleton.h>
+-#include <folly/experimental/io/IoUringEvent.h>
+ #include <folly/io/async/EventBaseLocal.h>
++#include <folly/io/async/IoUringEvent.h>
+ #include <folly/io/async/IoUringEventBaseLocal.h>
+ 
+ #if FOLLY_HAS_LIBURING
+diff --git a/folly/io/async/IoUringEventBaseLocal.h b/folly/io/async/IoUringEventBaseLocal.h
+index 745d9149a..ff6da0676 100644
+--- a/folly/io/async/IoUringEventBaseLocal.h
++++ b/folly/io/async/IoUringEventBaseLocal.h
+@@ -16,9 +16,9 @@
+ 
+ #pragma once
+ 
+-#include <folly/experimental/io/IoUringBackend.h>
+-#include <folly/experimental/io/Liburing.h>
+ #include <folly/io/async/EventBase.h>
++#include <folly/io/async/IoUringBackend.h>
++#include <folly/io/async/Liburing.h>
+ 
+ namespace folly {
+ 
+diff --git a/folly/io/async/IoUringProvidedBufferRing.h b/folly/io/async/IoUringProvidedBufferRing.h
+index fdcb6c10b..b7184a40f 100644
+--- a/folly/io/async/IoUringProvidedBufferRing.h
++++ b/folly/io/async/IoUringProvidedBufferRing.h
+@@ -16,8 +16,8 @@
+ 
+ #pragma once
+ 
+-#include <folly/experimental/io/Liburing.h>
+ #include <folly/io/async/IoUringBase.h>
++#include <folly/io/async/Liburing.h>
+ #include <folly/portability/SysMman.h>
+ 
+ #if FOLLY_HAS_LIBURING
+diff --git a/folly/io/async/SimpleAsyncIO.cpp b/folly/io/async/SimpleAsyncIO.cpp
+index d86d80ab2..807a2be8b 100644
+--- a/folly/io/async/SimpleAsyncIO.cpp
++++ b/folly/io/async/SimpleAsyncIO.cpp
+@@ -19,8 +19,8 @@
+ #include <folly/String.h>
+ #include <folly/coro/Baton.h>
+ #include <folly/experimental/io/AsyncIO.h>
+-#include <folly/experimental/io/IoUring.h>
+-#include <folly/experimental/io/Liburing.h>
++#include <folly/io/async/IoUring.h>
++#include <folly/io/async/Liburing.h>
+ #include <folly/portability/Sockets.h>
+ 
+ namespace folly {
+diff --git a/folly/io/async/test/AsyncIoUringSocketTest.cpp b/folly/io/async/test/AsyncIoUringSocketTest.cpp
+index 9596b8926..59e931c07 100644
+--- a/folly/io/async/test/AsyncIoUringSocketTest.cpp
++++ b/folly/io/async/test/AsyncIoUringSocketTest.cpp
+@@ -23,14 +23,14 @@
+ #include <folly/FileUtil.h>
+ #include <folly/Subprocess.h>
+ #include <folly/executors/GlobalExecutor.h>
+-#include <folly/experimental/io/AsyncIoUringSocket.h>
+-#include <folly/experimental/io/IoUringBackend.h>
+-#include <folly/experimental/io/IoUringEvent.h>
+ #include <folly/futures/Future.h>
+ #include <folly/futures/Promise.h>
++#include <folly/io/async/AsyncIoUringSocket.h>
+ #include <folly/io/async/AsyncServerSocket.h>
+ #include <folly/io/async/AsyncSocket.h>
+ #include <folly/io/async/EventBase.h>
++#include <folly/io/async/IoUringBackend.h>
++#include <folly/io/async/IoUringEvent.h>
+ #include <folly/portability/GTest.h>
+ #include <folly/system/Shell.h>
+ #include <folly/test/SocketAddressTestHelper.h>
+diff --git a/folly/io/async/test/BUCK b/folly/io/async/test/BUCK
+index 698702636..41dd3111e 100644
+--- a/folly/io/async/test/BUCK
++++ b/folly/io/async/test/BUCK
+@@ -977,12 +977,12 @@ cpp_unittest(
+         "//folly:file_util",
+         "//folly:subprocess",
+         "//folly/executors:global_executor",
+-        "//folly/experimental/io:async_io_uring_socket",
+-        "//folly/experimental/io:io_uring_backend",
+-        "//folly/experimental/io:io_uring_event",
+         "//folly/futures:core",
+         "//folly/io/async:async_base",
++        "//folly/io/async:async_io_uring_socket",
+         "//folly/io/async:async_socket",
++        "//folly/io/async:io_uring_backend",
++        "//folly/io/async:io_uring_event",
+         "//folly/io/async:server_socket",
+         "//folly/portability:gtest",
+         "//folly/system:shell",
+@@ -1014,9 +1014,9 @@ cpp_binary(
+         "//folly:benchmark",
+         "//folly:file_util",
+         "//folly/experimental/io:async_io",
+-        "//folly/experimental/io:io_uring",
+         "//folly/experimental/io/test:async_base_test_lib",
+         "//folly/experimental/io/test:io_test_temp_file_util_lib",
++        "//folly/io/async:io_uring",
+         "//folly/portability:gflags",
+     ],
+ )
+@@ -1029,9 +1029,9 @@ cpp_binary(
+         "//folly:benchmark",
+         "//folly:file_util",
+         "//folly/experimental/io:epoll_backend",
+-        "//folly/experimental/io:io_uring_backend",
+         "//folly/init:init",
+         "//folly/io/async:async_base",
++        "//folly/io/async:io_uring_backend",
+         "//folly/io/async:scoped_event_base_thread",
+         "//folly/portability:gflags",
+     ],
+@@ -1042,7 +1042,7 @@ cpp_unittest(
+     srcs = ["IoUringBackendSetupTest.cpp"],
+     owner = "kvigor@xmail.facebook.com",
+     deps = [
+-        "//folly/experimental/io:io_uring_backend",
++        "//folly/io/async:io_uring_backend",
+         "//folly/portability:gtest",
+     ],
+ )
+@@ -1062,12 +1062,12 @@ cpp_unittest(
+         "//folly:file_util",
+         "//folly:function",
+         "//folly:string",
+-        "//folly/experimental/io:io_uring_backend",
+         "//folly/experimental/io/test:io_test_temp_file_util_lib",
+         "//folly/init:init",
+         "//folly/io/async:async_base",
+         "//folly/io/async:async_udp_server_socket",
+         "//folly/io/async:async_udp_socket",
++        "//folly/io/async:io_uring_backend",
+         "//folly/io/async/test:async_signal_handler_test_lib",
+         "//folly/io/async/test:event_base_test_lib",
+         "//folly/portability:gtest",
+@@ -1079,9 +1079,9 @@ cpp_unittest(
+     srcs = ["IoUringEventBaseLocalTest.cpp"],
+     owner = "dylany@xmail.facebook.com",
+     deps = [
+-        "//folly/experimental/io:io_uring_backend",
+-        "//folly/experimental/io:io_uring_event_base_local",
+         "//folly/futures:core",
++        "//folly/io/async:io_uring_backend",
++        "//folly/io/async:io_uring_event_base_local",
+         "//folly/portability:gtest",
+     ],
+ )
+@@ -1092,10 +1092,10 @@ cpp_unittest(
+     owner = "dylany@xmail.facebook.com",
+     supports_static_listing = False,
+     deps = [
+-        "//folly/experimental/io:io_uring_backend",
+-        "//folly/experimental/io:io_uring_event",
+         "//folly/futures:core",
+         "//folly/io/async:async_base",
++        "//folly/io/async:io_uring_backend",
++        "//folly/io/async:io_uring_event",
+         "//folly/portability:gtest",
+     ],
+ )
+@@ -1107,9 +1107,9 @@ cpp_unittest(
+     owner = "dmm@xmail.facebook.com",
+     supports_static_listing = False,
+     deps = [
+-        "//folly/experimental/io:io_uring",
+         "//folly/experimental/io/test:async_base_test_lib",
+         "//folly/init:init",
++        "//folly/io/async:io_uring",
+     ],
+ )
+ 
+@@ -1120,8 +1120,8 @@ cpp_binary(
+     deps = [
+         "//folly:benchmark",
+         "//folly:file_util",
+-        "//folly/experimental/io:io_uring_backend",
+         "//folly/io/async:async_base",
++        "//folly/io/async:io_uring_backend",
+         "//folly/portability:gflags",
+     ],
+ )
+diff --git a/folly/io/async/test/IOBenchmark.cpp b/folly/io/async/test/IOBenchmark.cpp
+index e2421cf56..7fd52fc32 100644
+--- a/folly/io/async/test/IOBenchmark.cpp
++++ b/folly/io/async/test/IOBenchmark.cpp
+@@ -19,9 +19,9 @@
+ #include <folly/Benchmark.h>
+ #include <folly/FileUtil.h>
+ #include <folly/experimental/io/AsyncIO.h>
+-#include <folly/experimental/io/IoUring.h>
+ #include <folly/experimental/io/test/AsyncBaseTestLib.h>
+ #include <folly/experimental/io/test/IoTestTempFileUtil.h>
++#include <folly/io/async/IoUring.h>
+ #include <folly/portability/GFlags.h>
+ 
+ namespace {
+diff --git a/folly/io/async/test/IoUringBackendBench.cpp b/folly/io/async/test/IoUringBackendBench.cpp
+index 127fcbe56..033a8c579 100644
+--- a/folly/io/async/test/IoUringBackendBench.cpp
++++ b/folly/io/async/test/IoUringBackendBench.cpp
+@@ -20,10 +20,10 @@
+ #include <folly/Benchmark.h>
+ #include <folly/FileUtil.h>
+ #include <folly/experimental/io/EpollBackend.h>
+-#include <folly/experimental/io/IoUringBackend.h>
+ #include <folly/init/Init.h>
+ #include <folly/io/async/EventBase.h>
+ #include <folly/io/async/EventHandler.h>
++#include <folly/io/async/IoUringBackend.h>
+ #include <folly/io/async/ScopedEventBaseThread.h>
+ #include <folly/portability/GFlags.h>
+ 
+diff --git a/folly/io/async/test/IoUringBackendSetupTest.cpp b/folly/io/async/test/IoUringBackendSetupTest.cpp
+index 35b6fc8c8..4b6d3c2a1 100644
+--- a/folly/io/async/test/IoUringBackendSetupTest.cpp
++++ b/folly/io/async/test/IoUringBackendSetupTest.cpp
+@@ -14,7 +14,7 @@
+  * limitations under the License.
+  */
+ 
+-#include <folly/experimental/io/IoUringBackend.h>
++#include <folly/io/async/IoUringBackend.h>
+ #include <folly/portability/GTest.h>
+ 
+ namespace folly::test {
+diff --git a/folly/io/async/test/IoUringBackendTest.cpp b/folly/io/async/test/IoUringBackendTest.cpp
+index 4dd6c018c..75cd85ff4 100644
+--- a/folly/io/async/test/IoUringBackendTest.cpp
++++ b/folly/io/async/test/IoUringBackendTest.cpp
+@@ -20,12 +20,12 @@
+ #include <folly/FileUtil.h>
+ #include <folly/Function.h>
+ #include <folly/String.h>
+-#include <folly/experimental/io/IoUringBackend.h>
+ #include <folly/experimental/io/test/IoTestTempFileUtil.h>
+ #include <folly/init/Init.h>
+ #include <folly/io/async/AsyncUDPServerSocket.h>
+ #include <folly/io/async/AsyncUDPSocket.h>
+ #include <folly/io/async/EventHandler.h>
++#include <folly/io/async/IoUringBackend.h>
+ #include <folly/io/async/test/AsyncSignalHandlerTestLib.h>
+ #include <folly/io/async/test/EventBaseTestLib.h>
+ #include <folly/portability/GTest.h>
+diff --git a/folly/io/async/test/IoUringEventBaseLocalTest.cpp b/folly/io/async/test/IoUringEventBaseLocalTest.cpp
+index 1c46c18dc..c44387120 100644
+--- a/folly/io/async/test/IoUringEventBaseLocalTest.cpp
++++ b/folly/io/async/test/IoUringEventBaseLocalTest.cpp
+@@ -14,10 +14,10 @@
+  * limitations under the License.
+  */
+ 
+-#include <folly/experimental/io/IoUringBackend.h>
+-#include <folly/experimental/io/IoUringEventBaseLocal.h>
+ #include <folly/futures/Future.h>
+ #include <folly/futures/Promise.h>
++#include <folly/io/async/IoUringBackend.h>
++#include <folly/io/async/IoUringEventBaseLocal.h>
+ #include <folly/portability/GTest.h>
+ 
+ namespace folly {
+diff --git a/folly/io/async/test/IoUringEventTest.cpp b/folly/io/async/test/IoUringEventTest.cpp
+index 8ffe7519a..4e2652507 100644
+--- a/folly/io/async/test/IoUringEventTest.cpp
++++ b/folly/io/async/test/IoUringEventTest.cpp
+@@ -19,11 +19,11 @@
+ #include <map>
+ #include <vector>
+ 
+-#include <folly/experimental/io/IoUringBackend.h>
+-#include <folly/experimental/io/IoUringEvent.h>
+ #include <folly/futures/Future.h>
+ #include <folly/futures/Promise.h>
+ #include <folly/io/async/EventBase.h>
++#include <folly/io/async/IoUringBackend.h>
++#include <folly/io/async/IoUringEvent.h>
+ #include <folly/portability/GTest.h>
+ 
+ namespace folly {
+diff --git a/folly/io/async/test/IoUringTest.cpp b/folly/io/async/test/IoUringTest.cpp
+index 09d0ec28e..288fbaab5 100644
+--- a/folly/io/async/test/IoUringTest.cpp
++++ b/folly/io/async/test/IoUringTest.cpp
+@@ -14,9 +14,9 @@
+  * limitations under the License.
+  */
+ 
+-#include <folly/experimental/io/IoUring.h>
+ #include <folly/experimental/io/test/AsyncBaseTestLib.h>
+ #include <folly/init/Init.h>
++#include <folly/io/async/IoUring.h>
+ 
+ using folly::IoUring;
+ 
+diff --git a/folly/io/async/test/RegisteredFdBenchmark.cpp b/folly/io/async/test/RegisteredFdBenchmark.cpp
+index a1444c9d4..78a355659 100644
+--- a/folly/io/async/test/RegisteredFdBenchmark.cpp
++++ b/folly/io/async/test/RegisteredFdBenchmark.cpp
+@@ -18,9 +18,9 @@
+ 
+ #include <folly/Benchmark.h>
+ #include <folly/FileUtil.h>
+-#include <folly/experimental/io/IoUringBackend.h>
+ #include <folly/io/async/EventBase.h>
+ #include <folly/io/async/EventHandler.h>
++#include <folly/io/async/IoUringBackend.h>
+ #include <folly/portability/GFlags.h>
+ 
+ using namespace folly;
+diff --git a/folly/python/setup.py b/folly/python/setup.py
+index fc2d2fe0a..e8ff6fe5e 100755
+--- a/folly/python/setup.py
++++ b/folly/python/setup.py
+@@ -22,19 +22,27 @@ from Cython.Build import cythonize
+ from Cython.Compiler import Options
+ from setuptools import Extension, setup
+ 
+-
+ Options.fast_fail = True
+ 
++print("Building Cython extensions")
++extra_compile_args = [
++    "-std=c++17",
++    "-msse4.2",
++    "-D_GLIBCXX_USE_CXX11_ABI=0",
++]
++
+ exts = [
+-    Extension(
+-        "folly.executor",
+-        sources=["folly/executor.pyx"],
+-        libraries=["folly", "glog", "double-conversion", "iberty"],
+-    ),
+     Extension(
+         "folly.iobuf",
+         sources=["folly/iobuf.pyx"],
+-        libraries=["folly", "glog", "double-conversion", "iberty"],
++        libraries=["folly", "glog", "folly_python_cpp"],
++        extra_compile_args=extra_compile_args,
++    ),
++    Extension(
++        "folly.executor",
++        sources=["folly/executor.pyx"],
++        libraries=["folly", "glog", "folly_python_cpp"],
++        extra_compile_args=extra_compile_args,
+     ),
+ ]
+ 
+@@ -45,5 +53,8 @@ setup(
+     package_data={"": ["*.pxd", "*.h"]},
+     setup_requires=["cython"],
+     zip_safe=False,
+-    ext_modules=cythonize(exts, compiler_directives={"language_level": 3}),
++    ext_modules=cythonize(
++        exts,
++        compiler_directives={"language_level": 3},
++    ),
+ )
+diff --git a/folly/test/BUCK b/folly/test/BUCK
+index aa7ced478..0bbfa5cf3 100644
+--- a/folly/test/BUCK
++++ b/folly/test/BUCK
+@@ -704,6 +704,14 @@ cpp_unittest(
+     ],
+ )
+ 
++cpp_unittest(
++    name = "fmt_utility_test",
++    srcs = ["FmtUtilityTest.cpp"],
++    deps = [
++        "//folly:fmt_utility",
++    ],
++)
++
+ cpp_benchmark(
+     name = "format_benchmark",
+     srcs = ["FormatBenchmark.cpp"],
+diff --git a/folly/test/FmtUtilityTest.cpp b/folly/test/FmtUtilityTest.cpp
+new file mode 100644
+index 000000000..b1ac017ac
+--- /dev/null
++++ b/folly/test/FmtUtilityTest.cpp
+@@ -0,0 +1,39 @@
++/*
++ * Copyright (c) Meta Platforms, Inc. and affiliates.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include <folly/FmtUtility.h>
++
++#include <map>
++#include <string>
++#include <string_view>
++
++#include <gtest/gtest.h>
++
++using namespace std::literals;
++
++struct FmtUtilityTest : testing::Test {};
++
++TEST_F(FmtUtilityTest, fmt_make_format_args_from_map_fn) {
++  EXPECT_EQ(
++      "hello bob you silly goose",
++      fmt::vformat(
++          "hello {name} you {adj} goose",
++          folly::fmt_make_format_args_from_map(
++              std::map<std::string, std::string_view>{
++                  {"name"s, "bob"sv},
++                  {"adj"s, "silly"sv},
++              })));
++}

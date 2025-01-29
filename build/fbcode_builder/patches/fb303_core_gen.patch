@@ -1,0 +1,32 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 477b8d6a5..1d718f54a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -67,6 +67,7 @@ find_package(fmt CONFIG REQUIRED)
+ find_package(FBThrift CONFIG REQUIRED)
+ find_package(fizz CONFIG REQUIRED)
+ find_package(wangle CONFIG REQUIRED)
++find_package(proxygen CONFIG REQUIRED)
+ 
+ include(FBThriftLibrary)
+ 
+diff --git a/build/fbcode_builder/CMake/FBThriftCppLibrary.cmake b/build/fbcode_builder/CMake/FBThriftCppLibrary.cmake
+index 7688d8096..6d0acbbc7 100644
+--- a/build/fbcode_builder/CMake/FBThriftCppLibrary.cmake
++++ b/build/fbcode_builder/CMake/FBThriftCppLibrary.cmake
+@@ -63,13 +63,13 @@ function(add_fbthrift_cpp_library LIB_NAME THRIFT_FILE)
+     "${output_dir}/gen-cpp2/${base}_types.tcc"
+     "${output_dir}/gen-cpp2/${base}_types_custom_protocol.h"
+     "${output_dir}/gen-cpp2/${base}_metadata.h"
++    "${output_dir}/gen-cpp2/${base}_data.h"
+   )
+   list(APPEND generated_sources
+     "${output_dir}/gen-cpp2/${base}_constants.cpp"
+-    "${output_dir}/gen-cpp2/${base}_data.h"
+-    "${output_dir}/gen-cpp2/${base}_data.cpp"
+     "${output_dir}/gen-cpp2/${base}_types.cpp"
+     "${output_dir}/gen-cpp2/${base}_metadata.cpp"
++    "${output_dir}/gen-cpp2/${base}_data.cpp"
+   )
+   foreach(service IN LISTS ARG_SERVICES)
+     list(APPEND generated_headers

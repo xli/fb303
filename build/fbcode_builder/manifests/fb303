@@ -15,12 +15,14 @@ fb303_core = fb303/thrift
 
 [build]
 builder = cmake
+patchfile = fb303_core_gen.patch
 
 [dependencies]
 folly
 gflags
 glog
 fbthrift
+proxygen
 
 [cmake.defines.test=on]
 BUILD_TESTS=ON

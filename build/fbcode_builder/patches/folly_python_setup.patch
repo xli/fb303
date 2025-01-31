@@ -979,10 +979,10 @@ index 9d09166c7..000000000
 -add_library(logging_example_lib lib.cpp)
 -target_link_libraries(logging_example_lib folly)
 diff --git a/folly/python/setup.py b/folly/python/setup.py
-index fc2d2fe0a..620506e27 100755
+index fc2d2fe0a..66f60b8bd 100755
 --- a/folly/python/setup.py
 +++ b/folly/python/setup.py
-@@ -22,19 +22,29 @@ from Cython.Build import cythonize
+@@ -22,19 +22,30 @@ from Cython.Build import cythonize
  from Cython.Compiler import Options
  from setuptools import Extension, setup
  
@@ -997,6 +997,7 @@ index fc2d2fe0a..620506e27 100755
 +    "-fcoroutines",
 +    "-fsanitize=address",
 +]
++libs = ["folly", "glog", "folly_python_cpp", "asan"]
 +
  exts = [
 -    Extension(
@@ -1008,18 +1009,18 @@ index fc2d2fe0a..620506e27 100755
          "folly.iobuf",
          sources=["folly/iobuf.pyx"],
 -        libraries=["folly", "glog", "double-conversion", "iberty"],
-+        libraries=["folly", "glog", "folly_python_cpp"],
++        libraries=libs,
 +        extra_compile_args=extra_compile_args,
 +    ),
 +    Extension(
 +        "folly.executor",
 +        sources=["folly/executor.pyx"],
-+        libraries=["folly", "glog", "folly_python_cpp"],
++        libraries=libs,
 +        extra_compile_args=extra_compile_args,
      ),
  ]
  
-@@ -45,5 +55,8 @@ setup(
+@@ -45,5 +56,8 @@ setup(
      package_data={"": ["*.pxd", "*.h"]},
      setup_requires=["cython"],
      zip_safe=False,

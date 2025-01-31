@@ -979,10 +979,16 @@ index 9d09166c7..000000000
 -add_library(logging_example_lib lib.cpp)
 -target_link_libraries(logging_example_lib folly)
 diff --git a/folly/python/setup.py b/folly/python/setup.py
-index fc2d2fe0a..66f60b8bd 100755
+index fc2d2fe0a..514e3e634 100755
 --- a/folly/python/setup.py
 +++ b/folly/python/setup.py
-@@ -22,19 +22,30 @@ from Cython.Build import cythonize
+@@ -18,23 +18,51 @@
+ # Cython requires source files in a specific structure, the structure is
+ # created as tree of links to the real source files.
+ 
++import os
++
+ from Cython.Build import cythonize
  from Cython.Compiler import Options
  from setuptools import Extension, setup
  
@@ -997,6 +1003,17 @@ index fc2d2fe0a..66f60b8bd 100755
 +    "-fcoroutines",
 +    "-fsanitize=address",
 +]
++
++conda_home = os.getenv("CONDA_PREFIX")
++library_dirs = []
++include_dirs = []
++if conda_home:
++    include_dirs = [
++        conda_home + "/include",
++        conda_home + "/include/python3.10",
++    ]
++    library_dirs = [conda_home + "/lib"]
++
 +libs = ["folly", "glog", "folly_python_cpp", "asan"]
 +
  exts = [
@@ -1010,17 +1027,21 @@ index fc2d2fe0a..66f60b8bd 100755
          sources=["folly/iobuf.pyx"],
 -        libraries=["folly", "glog", "double-conversion", "iberty"],
 +        libraries=libs,
++        library_dirs=library_dirs,
++        include_dirs=include_dirs,
 +        extra_compile_args=extra_compile_args,
 +    ),
 +    Extension(
 +        "folly.executor",
 +        sources=["folly/executor.pyx"],
 +        libraries=libs,
++        library_dirs=library_dirs,
++        include_dirs=include_dirs,
 +        extra_compile_args=extra_compile_args,
      ),
  ]
  
-@@ -45,5 +56,8 @@ setup(
+@@ -45,5 +73,8 @@ setup(
      package_data={"": ["*.pxd", "*.h"]},
      setup_requires=["cython"],
      zip_safe=False,

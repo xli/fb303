@@ -945,11 +945,36 @@ index a1444c9d4..78a355659 100644
  #include <folly/portability/GFlags.h>
  
  using namespace folly;
+diff --git a/folly/logging/example/CMakeLists.txt b/folly/logging/example/CMakeLists.txt
+deleted file mode 100644
+index 9d09166c7..000000000
+--- a/folly/logging/example/CMakeLists.txt
++++ /dev/null
+@@ -1,19 +0,0 @@
+-# Copyright (c) Meta Platforms, Inc. and affiliates.
+-#
+-# Licensed under the Apache License, Version 2.0 (the "License");
+-# you may not use this file except in compliance with the License.
+-# You may obtain a copy of the License at
+-#
+-#     http://www.apache.org/licenses/LICENSE-2.0
+-#
+-# Unless required by applicable law or agreed to in writing, software
+-# distributed under the License is distributed on an "AS IS" BASIS,
+-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-# See the License for the specific language governing permissions and
+-# limitations under the License.
+-
+-add_executable(logging_example main.cpp)
+-target_link_libraries(logging_example logging_example_lib folly)
+-
+-add_library(logging_example_lib lib.cpp)
+-target_link_libraries(logging_example_lib folly)
 diff --git a/folly/python/setup.py b/folly/python/setup.py
-index fc2d2fe0a..e8ff6fe5e 100755
+index fc2d2fe0a..f359cbe6b 100755
 --- a/folly/python/setup.py
 +++ b/folly/python/setup.py
-@@ -22,19 +22,27 @@ from Cython.Build import cythonize
+@@ -22,19 +22,28 @@ from Cython.Build import cythonize
  from Cython.Compiler import Options
  from setuptools import Extension, setup
  
@@ -961,6 +986,7 @@ index fc2d2fe0a..e8ff6fe5e 100755
 +    "-std=c++17",
 +    "-msse4.2",
 +    "-D_GLIBCXX_USE_CXX11_ABI=0",
++    "-fcoroutines",
 +]
 +
  exts = [
@@ -984,7 +1010,7 @@ index fc2d2fe0a..e8ff6fe5e 100755
      ),
  ]
  
-@@ -45,5 +53,8 @@ setup(
+@@ -45,5 +54,8 @@ setup(
      package_data={"": ["*.pxd", "*.h"]},
      setup_requires=["cython"],
      zip_safe=False,

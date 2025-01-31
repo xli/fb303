@@ -96,7 +96,7 @@ index 081a281a0..a868b7f48 100644
      detail::TimeIterData timeIterData = fun(estimateCount);
      auto nsecs = duration_cast<nanoseconds>(timeIterData.duration);
 diff --git a/folly/CMakeLists.txt b/folly/CMakeLists.txt
-index 57b4dbcc4..bf36fe95a 100644
+index 57b4dbcc4..02f407c36 100644
 --- a/folly/CMakeLists.txt
 +++ b/folly/CMakeLists.txt
 @@ -12,6 +12,8 @@
@@ -108,7 +108,15 @@ index 57b4dbcc4..bf36fe95a 100644
  add_library(
      follybenchmark
      Benchmark.cpp
-@@ -38,49 +40,135 @@ if (PYTHON_EXTENSIONS)
+@@ -29,7 +31,6 @@ install(
+ )
+ 
+ add_subdirectory(debugging/exception_tracer)
+-add_subdirectory(logging/example)
+ 
+ if (PYTHON_EXTENSIONS)
+   # Create tree of symbolic links in structure required for successful
+@@ -38,49 +39,135 @@ if (PYTHON_EXTENSIONS)
  
    set(_cybld "${CMAKE_CURRENT_BINARY_DIR}/cybld")
  
@@ -261,7 +269,7 @@ index 57b4dbcc4..bf36fe95a 100644
      COMMAND
        python3 ${CMAKE_CURRENT_SOURCE_DIR}/python/setup.py
        bdist_wheel
-@@ -88,23 +176,39 @@ if (PYTHON_EXTENSIONS)
+@@ -88,23 +175,39 @@ if (PYTHON_EXTENSIONS)
    )
  
    install(

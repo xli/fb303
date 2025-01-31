@@ -971,10 +971,10 @@ index 9d09166c7..000000000
 -add_library(logging_example_lib lib.cpp)
 -target_link_libraries(logging_example_lib folly)
 diff --git a/folly/python/setup.py b/folly/python/setup.py
-index fc2d2fe0a..f359cbe6b 100755
+index fc2d2fe0a..620506e27 100755
 --- a/folly/python/setup.py
 +++ b/folly/python/setup.py
-@@ -22,19 +22,28 @@ from Cython.Build import cythonize
+@@ -22,19 +22,29 @@ from Cython.Build import cythonize
  from Cython.Compiler import Options
  from setuptools import Extension, setup
  
@@ -987,6 +987,7 @@ index fc2d2fe0a..f359cbe6b 100755
 +    "-msse4.2",
 +    "-D_GLIBCXX_USE_CXX11_ABI=0",
 +    "-fcoroutines",
++    "-fsanitize=address",
 +]
 +
  exts = [
@@ -1010,7 +1011,7 @@ index fc2d2fe0a..f359cbe6b 100755
      ),
  ]
  
-@@ -45,5 +54,8 @@ setup(
+@@ -45,5 +55,8 @@ setup(
      package_data={"": ["*.pxd", "*.h"]},
      setup_requires=["cython"],
      zip_safe=False,
